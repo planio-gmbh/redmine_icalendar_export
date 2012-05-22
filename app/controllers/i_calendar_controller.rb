@@ -19,12 +19,12 @@ require 'icalendar'
 
 class ICalendarController < ApplicationController
   before_filter :find_optional_project
-  accept_key_auth :index
-  
+  accept_rss_auth :index
+
   def index
     # project
     project_condition = @project ? ["#{Project.table_name}.id IN (?)", ([@project.id] + @project.descendants.collect(&:id))] : nil
-    
+
     # issue status
     case params[:status]
     when 'all'
@@ -34,7 +34,7 @@ class ICalendarController < ApplicationController
     else
       status_condition = nil
     end
-    
+
     # assignment
     case params[:assigned_to]
     when 'me'
@@ -45,35 +45,34 @@ class ICalendarController < ApplicationController
       assigned_to_condition = []
     else
     end
-    
+
     events = []
     # queries
     unless status_condition.nil? || assigned_to_condition.nil?
-      c = ARCondition.new(project_condition)
-      c << status_condition      unless status_condition.empty?
-      c << assigned_to_condition unless assigned_to_condition.empty?
-      events += Issue.find(
-        :all, 
-        :include => [:tracker, :assigned_to, :priority, :project, :status, :fixed_version, :author], 
-        :conditions => c.conditions
-        )
-      end
-      events += Version.find(
-        :all,
-        :include => [:project], 
-        :conditions => project_condition
-      )
-    
+      issue_scope = Issue.scoped :conditions => project_condition,
+                                 :include => [ :tracker, :assigned_to,
+                                               :priority, :project,
+                                               :status, :fixed_version, :author]
+      issue_scope = issue_scope.scoped :conditions => status_condition unless status_condition.blank?
+      issue_scope = issue_scope.scoped :conditions => assigned_to_condition unless assigned_to_condition.blank?
+      events += issue_scope.all
+    end
+    events += Version.find(
+      :all,
+      :include => [:project], 
+      :conditions => project_condition
+    )
+
     @cal_string = create_calendar(events).to_ical
     send_data @cal_string, :type => Mime::ICS, :filename => 'issues.ics'
   end
 
 private
-  
+
   def find_optional_project
     @project = Project.find_by_identifier(params[:project_id])
   end
-  
+
   def create_calendar(events)
     cal = Icalendar::Calendar.new
     events.each { |i| 
