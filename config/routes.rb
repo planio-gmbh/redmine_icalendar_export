@@ -1,3 +1,1 @@
-ActionController::Routing::Routes.draw do |map|
-  map.i_calendar '/i_calendar', :controller => 'i_calendar', :action => 'index'
-end
+get 'i_calendar', :to => 'i_calendar#index'
