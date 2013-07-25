@@ -59,7 +59,7 @@ class ICalendarController < ApplicationController
     end
     events += Version.find(
       :all,
-      :include => [:project], 
+      :include => [:project],
       :conditions => project_condition
     )
 
@@ -75,20 +75,23 @@ private
 
   def create_calendar(events)
     cal = Icalendar::Calendar.new
-    events.each { |i| 
-      if (i.due_date == nil) && (i.is_a? Issue) && (i.fixed_version != nil)
-        i.due_date = i.fixed_version.due_date
+    events.each { |i|
+      due_date = i.due_date
+      start_date = i.start_date if i.respond_to?(:start_date)
+      start_date ||= due_date
+      if i.is_a? Issue
+        due_date ||= i.fixed_version.due_date if i.fixed_version
+        due_date ||= start_date
       end
-      if i.due_date == nil
-        next
-      end
+      next unless start_date && due_date
+
       event = Icalendar::Event.new
-      event.dtstart        i.due_date, {'VALUE' => 'DATE'}
-      event.dtend          i.due_date + 1, {'VALUE' => 'DATE'}
+      event.dtstart        start_date, {'VALUE' => 'DATE'}
+      event.dtend          due_date + 1, {'VALUE' => 'DATE'}
       project_prefix = @project.nil? ? "#{i.project.name}: " : "" # add project name if this is a global feed
       if i.is_a? Issue
         event.summary      "#{project_prefix}#{i.subject} (#{i.status.name})"
-        event.url          url_for(:controller => 'issues', :action => 'show', :id => i.id, :project_id => i.project.identifier)
+        event.url          url_for(:controller => 'issues', :action => 'show', :id => i.id)
         unless i.fixed_version.nil?
           event.categories   [i.fixed_version.name]
         end
