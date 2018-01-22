@@ -23,14 +23,14 @@ class ICalendarController < ApplicationController
 
   def index
     # project
-    project_condition = @project ? ["#{Project.table_name}.id IN (?)", ([@project.id] + @project.descendants.collect(&:id))] : nil
+    project_condition = @project ? ["project_id IN (?)", ([@project.id] + @project.descendants.collect(&:id))] : nil
 
     # issue status
     case params[:status]
     when 'all'
       status_condition = []
     when 'open'
-      status_condition = ["#{IssueStatus.table_name}.is_closed = ?", false]
+      status_condition = ["issue_statuses.is_closed = ?", false]
     else
       status_condition = nil
     end
@@ -49,19 +49,12 @@ class ICalendarController < ApplicationController
     events = []
     # queries
     unless status_condition.nil? || assigned_to_condition.nil?
-      issue_scope = Issue.scoped :conditions => project_condition,
-                                 :include => [ :tracker, :assigned_to,
-                                               :priority, :project,
-                                               :status, :fixed_version, :author]
-      issue_scope = issue_scope.scoped :conditions => status_condition unless status_condition.blank?
-      issue_scope = issue_scope.scoped :conditions => assigned_to_condition unless assigned_to_condition.blank?
-      events += issue_scope.all
+      events += Issue.where(project_condition)
+                     .includes(:tracker, :assigned_to, :priority, :project, :status, :fixed_version, :author)
+                     .where(status_condition)
+		     .where(assigned_to_condition)
     end
-    events += Version.find(
-      :all,
-      :include => [:project],
-      :conditions => project_condition
-    )
+    events += Version.where(project_condition).includes(:project);
 
     @cal_string = create_calendar(events).to_ical
     send_data @cal_string, :type => Mime::ICS, :filename => 'issues.ics'
